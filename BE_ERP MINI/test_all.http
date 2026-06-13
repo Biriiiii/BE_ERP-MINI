@@ -1,0 +1,432 @@
+@host = https://localhost:7039
+
+# ══════════════════════════════════════════════════════════════
+# 0. AUTH — XÁC THỰC
+# ══════════════════════════════════════════════════════════════
+
+### Đăng nhập OWNER
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+  {
+    "username": "owner",
+    "password": "123456"
+  }
+
+### Gán token tự động
+@token = {{login.response.body.token}}
+
+### Xem thông tin user hiện tại
+GET {{host}}/api/auth/me
+Authorization: Bearer {{token}}
+
+
+# ══════════════════════════════════════════════════════════════
+# 1. HR — NHÂN SỰ
+# ══════════════════════════════════════════════════════════════
+
+### Lấy danh sách nhân viên
+GET {{host}}/api/hr/employees
+Authorization: Bearer {{token}}
+
+### Xem chi tiết nhân viên 1
+GET {{host}}/api/hr/employees/1
+Authorization: Bearer {{token}}
+
+### Tạo nhân viên mới
+POST {{host}}/api/hr/employees
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Test",
+  "department": "Sale",
+  "position": "Staff",
+  "role": "EMPLOYEE",
+  "baseSalary": 8000000,
+  "mealAllowance": 500000,
+  "attendanceAllowance": 300000
+}
+
+### Cập nhật nhân viên 1
+PATCH {{host}}/api/hr/employees/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "position": "Senior Staff",
+  "baseSalary": 9000000,
+  "reason": "Nang luong dinh ky",
+  "version": 1
+}
+
+### Xoá mềm nhân viên (cần employeeId thực)
+DELETE {{host}}/api/hr/employees/6?reason=Nghi%20viec%20tu%20nguyen&version=1
+Authorization: Bearer {{token}}
+
+### Check-in nhân viên 1
+POST {{host}}/api/hr/attendance/checkin
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": 1,
+  "timestamp": "2026-06-13T08:00:00Z"
+}
+
+### Check-out nhân viên 1
+POST {{host}}/api/hr/attendance/checkout
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": 1,
+  "timestamp": "2026-06-13T17:30:00Z"
+}
+
+### Tạo đơn xin nghỉ phép
+POST {{host}}/api/hr/leave-requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": 4,
+  "leaveType": "ANNUAL",
+  "fromDate": "2026-06-20",
+  "toDate": "2026-06-20",
+  "reason": "Viec gia dinh"
+}
+
+### Duyệt đơn nghỉ phép 1
+PATCH {{host}}/api/hr/leave-requests/1/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approverId": 1
+}
+
+### Tạo bảng lương tháng 6 cho nhân viên 1
+POST {{host}}/api/hr/payroll/generate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "employeeId": 1,
+  "year": 2026,
+  "month": 6,
+  "unpaidLeaveDays": 0,
+  "lateMinutes": 0,
+  "approvedOtHours": 0
+}
+
+### Duyệt bảng lương 1
+PATCH {{host}}/api/hr/payroll/1/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approverId": 1
+}
+
+### Xem bảng lương của tôi
+GET {{host}}/api/hr/payroll/me
+Authorization: Bearer {{token}}
+
+### Xem toàn bộ bảng lương
+GET {{host}}/api/hr/payroll/list
+Authorization: Bearer {{token}}
+
+
+# ══════════════════════════════════════════════════════════════
+# 2. INVENTORY — KHO HÀNG
+# ══════════════════════════════════════════════════════════════
+
+### Lấy toàn bộ sản phẩm
+GET {{host}}/api/inventory/products
+Authorization: Bearer {{token}}
+
+### Lọc theo category
+GET {{host}}/api/inventory/products?category=FMCG
+Authorization: Bearer {{token}}
+
+### Tìm kiếm sản phẩm
+GET {{host}}/api/inventory/products?keyword=Gao
+Authorization: Bearer {{token}}
+
+### Tạo sản phẩm mới
+POST {{host}}/api/inventory/products
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Bia Heineken 330ml",
+  "categoryCode": "BIA",
+  "unit": "lon",
+  "barcode": "8934673123456",
+  "minStockLevel": 24,
+  "averageCost": 15000,
+  "salePrice": 22000
+}
+
+### Xem tồn kho
+GET {{host}}/api/inventory/stock-balance
+Authorization: Bearer {{token}}
+
+### Xem tồn kho sản phẩm 1
+GET {{host}}/api/inventory/stock-balance?product_id=1
+Authorization: Bearer {{token}}
+
+### Cảnh báo hàng sắp hết hạn (trong 2 ngày)
+GET {{host}}/api/inventory/expiry-alerts?days=5
+Authorization: Bearer {{token}}
+
+### Tạo phiếu nhập kho
+POST {{host}}/api/inventory/receipts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "supplierName": "NCC Anh Tuan",
+  "createdBy": 1,
+  "lines": [
+    {
+      "productId": 1,
+      "quantity": 10,
+      "unitCost": 130000,
+      "expiryDate": "2026-07-15"
+    },
+    {
+      "productId": 2,
+      "quantity": 50,
+      "unitCost": 45000,
+      "expiryDate": null
+    }
+  ]
+}
+
+### Duyệt phiếu nhập kho 1
+PATCH {{host}}/api/inventory/receipts/1/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approverId": 1
+}
+
+### Xuất kho (nội bộ)
+POST {{host}}/api/inventory/issues
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": 2,
+  "quantity": 5,
+  "sale": false,
+  "createdBy": 1,
+  "reason": "Dung noi bo"
+}
+
+### Ghi nhận hao hụt
+POST {{host}}/api/inventory/shrinkage
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 1,
+  "createdBy": 1,
+  "reason": "Het han su dung"
+}
+
+### Tạo phiên kiểm kho
+POST {{host}}/api/inventory/stocktake
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Kiem kho thang 6/2026",
+  "createdBy": 1
+}
+
+
+# ══════════════════════════════════════════════════════════════
+# 3. POS — BÁN HÀNG
+# ══════════════════════════════════════════════════════════════
+
+### Tra cứu sản phẩm theo barcode
+GET {{host}}/api/pos/products/lookup?barcode=8930000000028
+Authorization: Bearer {{token}}
+
+### Xem khuyến mãi đang áp dụng
+GET {{host}}/api/pos/promotions/active
+Authorization: Bearer {{token}}
+
+### Mở ca thu ngân
+POST {{host}}/api/pos/session/open
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "cashierId": 4,
+  "openingFloat": 500000
+}
+
+### Tạo giao dịch bán hàng
+POST {{host}}/api/pos/transactions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "cashierId": 4,
+  "paymentMethod": "CASH",
+  "lines": [
+    { "productId": 1, "quantity": 1.5 },
+    { "productId": 2, "quantity": 2 }
+  ]
+}
+
+### Đóng ca thu ngân
+POST {{host}}/api/pos/session/close
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "cashierId": 4,
+  "closingCash": 1000000
+}
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. PURCHASING — MUA HÀNG
+# ══════════════════════════════════════════════════════════════
+
+### Lấy danh sách yêu cầu mua hàng
+GET {{host}}/api/purchasing/requests
+Authorization: Bearer {{token}}
+
+### Tạo yêu cầu mua hàng
+POST {{host}}/api/purchasing/requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 20,
+  "createdBy": 3,
+  "reason": "Sap het hang thit heo"
+}
+
+### Lấy danh sách PO
+GET {{host}}/api/purchasing/orders
+Authorization: Bearer {{token}}
+
+### Tạo PO (dưới 10 triệu — tự approve)
+POST {{host}}/api/purchasing/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "supplierName": "NCC Anh Tuan",
+  "amount": 5000000,
+  "ownerOverride": false
+}
+
+### Duyệt PO 1
+PATCH {{host}}/api/purchasing/orders/1/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approverId": 1
+}
+
+
+# ══════════════════════════════════════════════════════════════
+# 5. ACCOUNTING — KẾ TOÁN
+# ══════════════════════════════════════════════════════════════
+
+### Xem nhật ký kế toán
+GET {{host}}/api/accounting/journal?page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Tạo bút toán thủ công
+POST {{host}}/api/accounting/journal
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "description": "Thu tien mat khach hang",
+  "lines": [
+    { "accountCode": "111", "accountName": "Tien mat", "debit": 1000000, "credit": 0 },
+    { "accountCode": "511", "accountName": "Doanh thu", "debit": 0, "credit": 1000000 }
+  ]
+}
+
+### Đảo ngược bút toán 1
+POST {{host}}/api/accounting/journal/1/reverse?reason=Nhap%20sai%20so%20lieu
+Authorization: Bearer {{token}}
+
+### Xem hoá đơn công nợ
+GET {{host}}/api/accounting/ap-invoices
+Authorization: Bearer {{token}}
+
+### Xem công nợ chưa thanh toán
+GET {{host}}/api/accounting/ap-invoices?unpaidOnly=true
+Authorization: Bearer {{token}}
+
+### Thanh toán hoá đơn 1
+POST {{host}}/api/accounting/ap-invoices/1/pay
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": 5000000,
+  "method": "BANK",
+  "reference": "TT20260613001"
+}
+
+### Xem kỳ kế toán
+GET {{host}}/api/accounting/periods
+Authorization: Bearer {{token}}
+
+### Đóng kỳ kế toán 1
+POST {{host}}/api/accounting/periods/1/close
+Authorization: Bearer {{token}}
+
+
+# ══════════════════════════════════════════════════════════════
+# 6. AUDIT — NHẬT KÝ THAY ĐỔI
+# ══════════════════════════════════════════════════════════════
+
+### Xem lịch sử thay đổi nhân viên 1
+GET {{host}}/api/audit/entity/Employee/1
+Authorization: Bearer {{token}}
+
+### Xem lịch sử thao tác user 1
+GET {{host}}/api/audit/user/1
+Authorization: Bearer {{token}}
+
+### Feed thay đổi (10 gần nhất)
+GET {{host}}/api/audit/feed?limit=10
+Authorization: Bearer {{token}}
+
+### Export CSV audit log
+GET {{host}}/api/audit/export
+Authorization: Bearer {{token}}
+
+
+# ══════════════════════════════════════════════════════════════
+# 7. USERS — QUẢN LÝ TÀI KHOẢN
+# ══════════════════════════════════════════════════════════════
+
+### Lấy danh sách users
+GET {{host}}/api/users
+Authorization: Bearer {{token}}
+
+### Xem user 1
+GET {{host}}/api/users/1
+Authorization: Bearer {{token}}
