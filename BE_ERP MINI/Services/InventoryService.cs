@@ -42,6 +42,32 @@ public sealed class InventoryService(AppDbContext db)
             });
         }
 
+        var totalAmount = receipt.Lines.Sum(x => x.Quantity * x.UnitCost);
+
+        // Auto create APInvoice
+        db.APInvoices.Add(new APInvoice
+        {
+            SupplierName = receipt.SupplierName,
+            InvoiceNumber = $"INV-{receipt.Id}",
+            Amount = totalAmount,
+            InvoiceDate = DateOnly.FromDateTime(DateTime.Today),
+            DueDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)), // default 30 days
+            IsPaid = false,
+            PurchaseOrderId = null // could extract if needed
+        });
+
+        // Auto journal
+        db.JournalEntries.Add(new JournalEntry
+        {
+            Source = JournalSource.PO_RECEIPT,
+            Description = $"Nhap kho {receipt.SupplierName} (Receipt {receipt.Id})",
+            CreatedBy = approverId,
+            Lines = [
+                new JournalLine { AccountCode = "156", AccountName = "Hang hoa", Debit = totalAmount },
+                new JournalLine { AccountCode = "331", AccountName = "Phai tra NCC", Credit = totalAmount }
+            ]
+        });
+
         receipt.ApprovedBy = approverId;
         receipt.ApprovedAt = DateTime.UtcNow;
         receipt.Status     = ApprovalStatus.APPROVED;

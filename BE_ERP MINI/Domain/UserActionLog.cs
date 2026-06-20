@@ -17,6 +17,7 @@ public sealed class UserActionLog
     public string? Reason { get; set; }
     public string Source { get; set; } = "USER";
     public string? SessionId { get; set; }
+    public long? ParentAuditId { get; set; }            // Phục vụ truy vết action cascade
     public string? DeviceInfo { get; set; }
     public string? IpAddress { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

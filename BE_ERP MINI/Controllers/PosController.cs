@@ -107,4 +107,60 @@ public sealed class PosController(
 
         return Ok(transaction);
     }
+
+    [HttpPost("refunds")]
+    public async Task<IActionResult> CreateRefund(CreatePosRefundRequest request)
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+        var transaction = await db.PosTransactions.Include(x => x.Lines).SingleOrDefaultAsync(x => x.Id == request.TransactionId);
+        if (transaction is null) return NotFound("Khong tim thay giao dich POS.");
+        
+        var line = transaction.Lines.SingleOrDefault(x => x.ProductId == request.ProductId);
+        if (line is null) return BadRequest("San pham khong co trong giao dich nay.");
+        
+        if (request.Quantity > line.Quantity) return BadRequest("So luong hoan tra khong duoc lon hon so luong da mua.");
+
+        // Calculate refund amount
+        var unitPrice = line.UnitPrice;
+        var refundAmount = request.Quantity * unitPrice;
+
+        var refund = new PosRefund
+        {
+            TransactionId = request.TransactionId,
+            ProductId = request.ProductId,
+            Quantity = request.Quantity,
+            RefundAmount = refundAmount,
+            Reason = request.Reason,
+            ProcessedBy = context.Current(Request).UserId ?? 0
+        };
+
+        db.PosRefunds.Add(refund);
+
+        var vatAmount = decimal.Round(refundAmount / 11m, 0);
+        var revenue = refundAmount - vatAmount;
+        var (accCode, accName) = transaction.PaymentMethod == PaymentMethod.CASH ? ("111", "Tien mat") : ("1121", "Tien gui ngan hang");
+        
+        accounting.Create(new JournalEntry 
+        { 
+            Source = JournalSource.REVERSAL, 
+            Description = $"Hoan tra POS {transaction.Id}: {request.Reason}", 
+            CreatedBy = context.Current(Request).UserId, 
+            Lines = [
+                new JournalLine { AccountCode = "511", AccountName = "Doanh thu ban hang", Debit = revenue }, 
+                new JournalLine { AccountCode = "3331", AccountName = "Thue GTGT", Debit = vatAmount }, 
+                new JournalLine { AccountCode = accCode, AccountName = accName, Credit = refundAmount }
+            ] 
+        });
+
+        await actionLog.AddLogAsync(Request, "CREATE", "PosRefund", "0",
+            $"Hoan tra {request.Quantity} SP {request.ProductId} cho POS {transaction.Id}", null, refund);
+        
+        await db.SaveChangesAsync();
+
+        var lastLog = db.UserActionLogs.Local.LastOrDefault(x => x.EntityType == "PosRefund");
+        if (lastLog is not null) lastLog.EntityId = refund.Id.ToString();
+        await db.SaveChangesAsync();
+
+        return Ok(refund);
+    }
 }

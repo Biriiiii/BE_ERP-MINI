@@ -109,4 +109,76 @@ public sealed class AccountingController(
         await db.SaveChangesAsync();
         return Ok(period);
     }
+
+    [HttpGet("ap/aging")]
+    public async Task<IActionResult> AgingAp()
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        
+        var invoices = await db.APInvoices.AsNoTracking()
+            .Where(x => !x.IsPaid)
+            .ToListAsync();
+            
+        var summary = invoices.GroupBy(x => x.SupplierName).Select(g => new
+        {
+            SupplierName = g.Key,
+            TotalUnpaid = g.Sum(x => x.Amount),
+            NotDue = g.Where(x => x.DueDate > today).Sum(x => x.Amount),
+            DueIn7Days = g.Where(x => x.DueDate <= today.AddDays(7) && x.DueDate > today).Sum(x => x.Amount),
+            Overdue1To14Days = g.Where(x => x.DueDate <= today && x.DueDate >= today.AddDays(-14)).Sum(x => x.Amount),
+            OverdueMoreThan14Days = g.Where(x => x.DueDate < today.AddDays(-14)).Sum(x => x.Amount)
+        }).OrderByDescending(x => x.TotalUnpaid).ToList();
+        
+        return Ok(summary);
+    }
+
+    [HttpGet("reports/daily-revenue")]
+    public async Task<IActionResult> DailyRevenue([FromQuery] DateOnly? date)
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
+        var nextDate = targetDate.AddDays(1);
+        
+        var startUtc = targetDate.ToDateTime(TimeOnly.MinValue);
+        var endUtc = nextDate.ToDateTime(TimeOnly.MinValue);
+
+        var sales = await db.JournalEntries.AsNoTracking()
+            .Include(x => x.Lines)
+            .Where(x => x.Source == JournalSource.POS_SALE && x.CreatedAt >= startUtc && x.CreatedAt < endUtc)
+            .ToListAsync();
+            
+        var totalRevenue = sales.SelectMany(x => x.Lines).Where(x => x.AccountCode == "511").Sum(x => x.Credit);
+        
+        return Ok(new { Date = targetDate, TotalRevenue = totalRevenue, TransactionCount = sales.Count });
+    }
+
+    [HttpGet("reports/p-and-l")]
+    public async Task<IActionResult> PAndL([FromQuery] int year, [FromQuery] int month)
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        
+        var entries = await db.JournalEntries.AsNoTracking()
+            .Include(x => x.Lines)
+            .Where(x => x.CreatedAt.Year == year && x.CreatedAt.Month == month)
+            .ToListAsync();
+            
+        var lines = entries.SelectMany(x => x.Lines).ToList();
+        
+        var revenue = lines.Where(x => x.AccountCode.StartsWith("511")).Sum(x => x.Credit - x.Debit);
+        var cogs = lines.Where(x => x.AccountCode.StartsWith("632")).Sum(x => x.Debit - x.Credit);
+        var expenses = lines.Where(x => x.AccountCode.StartsWith("642")).Sum(x => x.Debit - x.Credit);
+        var netProfit = revenue - cogs - expenses;
+        
+        return Ok(new
+        {
+            Year = year,
+            Month = month,
+            Revenue = revenue,
+            COGS = cogs,
+            GrossProfit = revenue - cogs,
+            OperatingExpenses = expenses,
+            NetProfit = netProfit
+        });
+    }
 }

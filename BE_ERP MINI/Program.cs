@@ -120,6 +120,13 @@ app.Use(async (httpContext, next) =>
     try { await next(httpContext); }
     catch (UnauthorizedAccessException ex)
     {
+        var actionLog = httpContext.RequestServices.GetService<UserActionLogService>();
+        if (actionLog != null)
+        {
+            await actionLog.AddLogAsync(httpContext.Request, "PERMISSION_DENIED", "System", "0",
+                $"Truy cap bi tu choi: {ex.Message}", null, null);
+        }
+
         httpContext.Response.StatusCode  = 403;
         httpContext.Response.ContentType = "application/json";
         await httpContext.Response.WriteAsJsonAsync(new { error = ex.Message });

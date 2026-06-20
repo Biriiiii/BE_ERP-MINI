@@ -9,6 +9,7 @@ public sealed record AttendanceRequest(int EmployeeId, DateTime Timestamp);
 public sealed record CreateLeaveRequest(int EmployeeId, string LeaveType, DateOnly FromDate, DateOnly ToDate, string Reason);
 public sealed record GeneratePayrollRequest(int EmployeeId, int Year, int Month, decimal UnpaidLeaveDays, decimal LateMinutes, decimal ApprovedOtHours);
 public sealed record ApproveRequest(int ApproverId);
+public sealed record ApproveOtRequest(int ApproverId, decimal OtHours);
 
 // ── INVENTORY ────────────────────────────────────────────────────────────────
 public sealed record CreateProductRequest(string Name, string CategoryCode, string Unit, string? Barcode, decimal MinStockLevel, decimal AverageCost, decimal SalePrice);
@@ -28,6 +29,7 @@ public sealed record OpenPosSessionRequest(int CashierId, decimal OpeningFloat);
 public sealed record ClosePosSessionRequest(int SessionId, int CashierId, decimal ClosingCash);
 public sealed record CreatePosTransactionRequest(int SessionId, int CashierId, PaymentMethod PaymentMethod, List<CreatePosTransactionLineRequest> Lines);
 public sealed record CreatePosTransactionLineRequest(int ProductId, decimal Quantity);
+public sealed record CreatePosRefundRequest(int TransactionId, int ProductId, decimal Quantity, string Reason);
 
 // ── ACCOUNTING ────────────────────────────────────────────────────────────────
 public sealed record CreateJournalRequest(string Description, List<JournalLineRequest> Lines);

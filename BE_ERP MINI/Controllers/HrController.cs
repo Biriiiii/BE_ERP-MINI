@@ -139,6 +139,23 @@ public sealed class HrController(
         return NoContent();
     }
 
+    [HttpGet("contracts/expiring")]
+    public async Task<IActionResult> GetExpiringContracts()
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+        var in30Days = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
+        var contracts = await db.Contracts
+            .Include(x => x.Employee)
+            .Where(x => x.Status == ContractStatus.ACTIVE && x.EndDate <= in30Days && !x.Employee.IsDeleted)
+            .Select(x => new {
+                x.Id, x.ContractType, x.StartDate, x.EndDate,
+                EmployeeName = x.Employee.FullName,
+                EmployeeCode = x.Employee.EmployeeCode
+            })
+            .ToListAsync();
+        return Ok(contracts);
+    }
+
     // ─── Chấm công ─────────────────────────────────────────────────────────────
 
     [HttpPost("attendance/checkin")]
@@ -184,6 +201,40 @@ public sealed class HrController(
         return Ok(record);
     }
 
+    [HttpPost("attendance/process-missing-checkouts")]
+    public async Task<IActionResult> ProcessMissingCheckouts()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var missingRecords = await db.AttendanceRecords
+            .Where(x => x.WorkDate < today && x.CheckOutAt == null && x.Status != AttendanceStatus.MISSING_CHECKOUT)
+            .ToListAsync();
+        
+        foreach (var r in missingRecords) r.Status = AttendanceStatus.MISSING_CHECKOUT;
+        await db.SaveChangesAsync();
+        return Ok(new { ProcessedCount = missingRecords.Count });
+    }
+
+    [HttpPatch("attendance/{id:int}/approve-ot")]
+    public async Task<IActionResult> ApproveOt(int id, ApproveOtRequest request)
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+        var record = await db.AttendanceRecords.SingleOrDefaultAsync(x => x.Id == id);
+        if (record is null) return NotFound("Khong tim thay ban ghi cham cong.");
+        
+        var old = new { record.HasApprovedOt, record.OtHours };
+        record.HasApprovedOt = true;
+        record.OtHours = request.OtHours;
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await actionLog.AddLogAsync(Request, "APPROVE", "AttendanceRecord", record.Id.ToString(),
+            $"Duyet {request.OtHours}h OT cho ban ghi cham cong ngay {record.WorkDate}",
+            old, new { record.HasApprovedOt, record.OtHours });
+            
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return Ok(record);
+    }
+
     // ─── Nghỉ phép ─────────────────────────────────────────────────────────────
 
     [HttpPost("leave-requests")]
@@ -192,10 +243,12 @@ public sealed class HrController(
         var employee = await db.Employees.SingleOrDefaultAsync(x => x.Id == request.EmployeeId && !x.IsDeleted);
         if (employee is null) return NotFound("Khong tim thay nhan vien.");
         var days = (decimal)(request.ToDate.DayNumber - request.FromDate.DayNumber + 1);
-        if (employee.AnnualLeaveBalance < days)
-            return BadRequest($"So ngay phep khong du (con {employee.AnnualLeaveBalance}, yeu cau {days}).");
-
-        employee.AnnualLeaveBalance -= days;
+        if (request.LeaveType == "ANNUAL")
+        {
+            if (employee.AnnualLeaveBalance < days)
+                return BadRequest($"So ngay phep khong du (con {employee.AnnualLeaveBalance}, yeu cau {days}).");
+            employee.AnnualLeaveBalance -= days;
+        }
         var leave = new LeaveRequest
         {
             EmployeeId = request.EmployeeId, CreatedBy = request.EmployeeId,

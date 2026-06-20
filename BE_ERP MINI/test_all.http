@@ -399,22 +399,92 @@ Authorization: Bearer {{token}}
 
 
 # ══════════════════════════════════════════════════════════════
-# 6. AUDIT — NHẬT KÝ THAY ĐỔI
+# 6. AUDIT — NHẬT KÝ THAY ĐỔI (TÁCH THEO MODULE)
 # ══════════════════════════════════════════════════════════════
 
-### Xem lịch sử thay đổi nhân viên 1
+# ── 6.1 Audit Nhân sự ──────────────────────────────────────────
+
+### Lịch sử thay đổi nhân viên
+GET {{host}}/api/audit/employees
+Authorization: Bearer {{token}}
+
+### Lịch sử chấm công
+GET {{host}}/api/audit/attendance
+Authorization: Bearer {{token}}
+
+### Lịch sử nghỉ phép
+GET {{host}}/api/audit/leaves
+Authorization: Bearer {{token}}
+
+### Lịch sử bảng lương
+GET {{host}}/api/audit/payroll
+Authorization: Bearer {{token}}
+
+# ── 6.2 Audit Sản phẩm & Kho ──────────────────────────────────
+
+### Lịch sử sản phẩm (tạo/sửa/xoá)
+GET {{host}}/api/audit/products
+Authorization: Bearer {{token}}
+
+### Lịch sử nhập kho
+GET {{host}}/api/audit/warehouse-receipts
+Authorization: Bearer {{token}}
+
+### Lịch sử xuất kho & hao hụt
+GET {{host}}/api/audit/warehouse-issues
+Authorization: Bearer {{token}}
+
+# ── 6.3 Audit Đơn hàng & POS ──────────────────────────────────
+
+### Lịch sử giao dịch bán hàng
+GET {{host}}/api/audit/transactions
+Authorization: Bearer {{token}}
+
+### Lịch sử ca thu ngân
+GET {{host}}/api/audit/pos-sessions
+Authorization: Bearer {{token}}
+
+### Lịch sử hoàn trả hàng
+GET {{host}}/api/audit/refunds
+Authorization: Bearer {{token}}
+
+# ── 6.4 Audit Mua hàng ────────────────────────────────────────
+
+### Lịch sử đơn mua hàng & yêu cầu mua
+GET {{host}}/api/audit/purchasing
+Authorization: Bearer {{token}}
+
+# ── 6.5 Audit Kế toán ─────────────────────────────────────────
+
+### Lịch sử bút toán kế toán
+GET {{host}}/api/audit/journal
+Authorization: Bearer {{token}}
+
+### Lịch sử công nợ & thanh toán
+GET {{host}}/api/audit/ap
+Authorization: Bearer {{token}}
+
+# ── 6.6 Audit Tài khoản ───────────────────────────────────────
+
+### Lịch sử quản lý tài khoản
+GET {{host}}/api/audit/users
+Authorization: Bearer {{token}}
+
+# ── 6.7 Audit Tổng hợp (endpoint cũ vẫn giữ) ─────────────────
+
+### Xem lịch sử 1 bản ghi cụ thể (entityType + entityId)
 GET {{host}}/api/audit/entity/Employee/1
 Authorization: Bearer {{token}}
 
-### Xem lịch sử thao tác user 1
+### Xem thao tác của 1 user
 GET {{host}}/api/audit/user/1
 Authorization: Bearer {{token}}
 
-### Feed thay đổi (10 gần nhất)
+### Feed thay đổi real-time
 GET {{host}}/api/audit/feed?limit=10
 Authorization: Bearer {{token}}
 
-### Export CSV audit log
+### Export CSV
 GET {{host}}/api/audit/export
 Authorization: Bearer {{token}}
 
