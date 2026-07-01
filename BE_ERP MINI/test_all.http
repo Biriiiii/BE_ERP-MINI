@@ -500,3 +500,31 @@ Authorization: Bearer {{token}}
 ### Xem user 1
 GET {{host}}/api/users/1
 Authorization: Bearer {{token}}
+
+### Tạo user mới
+POST {{host}}/api/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "fullName": "Test Nguoi Dung",
+  "email": "test@erpmini.vn",
+  "role": "EMPLOYEE",
+  "isActive": true
+}
+
+### Sửa user 1 (Ví dụ đổi tên)
+PATCH {{host}}/api/users/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "fullName": "Chu Sieu Thi Da Sua",
+  "reason": "Cap nhat ten dem"
+}
+
+### Xóa (Soft Delete) user vừa tạo (Ví dụ id = 6)
+# Thay {id} bằng ID thực tế và truyền lý do
+DELETE {{host}}/api/users/6?reason=Nghi%20viec
+Authorization: Bearer {{token}}

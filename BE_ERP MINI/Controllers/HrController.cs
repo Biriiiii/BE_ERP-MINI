@@ -7,8 +7,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BE_ERP_MINI.Controllers;
 
+using Microsoft.AspNetCore.Authorization;
+
 [ApiController]
 [Route("api/hr")]
+[Authorize]
 public sealed class HrController(
     AppDbContext db,
     ErpContext context,
@@ -20,7 +23,7 @@ public sealed class HrController(
     [HttpGet("employees")]
     public async Task<IActionResult> Employees()
     {
-        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF);
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF, Role.CASHIER);
         return Ok(await db.Employees.AsNoTracking().Where(x => !x.IsDeleted).OrderBy(x => x.EmployeeCode).ToListAsync());
     }
 
@@ -53,6 +56,12 @@ public sealed class HrController(
             BaseSalary          = request.BaseSalary,
             MealAllowance       = request.MealAllowance,
             AttendanceAllowance = request.AttendanceAllowance,
+            NationalId          = request.NationalId,
+            BankAccountNumber   = request.BankAccountNumber,
+            BankName            = request.BankName,
+            AnnualLeaveBalance  = request.AnnualLeaveBalance,
+            HireDate            = request.HireDate ?? DateOnly.FromDateTime(DateTime.Today),
+            TerminationDate     = request.TerminationDate,
             CreatedBy           = context.Current(Request).UserId ?? 0
         };
 
@@ -85,9 +94,26 @@ public sealed class HrController(
         employee.BaseSalary          = request.BaseSalary          ?? employee.BaseSalary;
         employee.MealAllowance       = request.MealAllowance       ?? employee.MealAllowance;
         employee.AttendanceAllowance = request.AttendanceAllowance ?? employee.AttendanceAllowance;
+        employee.NationalId          = request.NationalId          ?? employee.NationalId;
+        employee.BankAccountNumber   = request.BankAccountNumber   ?? employee.BankAccountNumber;
+        employee.BankName            = request.BankName            ?? employee.BankName;
+        employee.AnnualLeaveBalance  = request.AnnualLeaveBalance  ?? employee.AnnualLeaveBalance;
+        employee.HireDate            = request.HireDate            ?? employee.HireDate;
+        
+        if (request.TerminationDate.HasValue) 
+        {
+             employee.TerminationDate = request.TerminationDate;
+        }
+
         if (request.Status is { } s && s == EmployeeStatus.TERMINATED && employee.Status != EmployeeStatus.TERMINATED)
-        { employee.Status = EmployeeStatus.TERMINATED; employee.TerminationDate = DateOnly.FromDateTime(DateTime.Today); }
-        else if (request.Status.HasValue) employee.Status = request.Status.Value;
+        { 
+             employee.Status = EmployeeStatus.TERMINATED; 
+             employee.TerminationDate = request.TerminationDate ?? DateOnly.FromDateTime(DateTime.Today); 
+        }
+        else if (request.Status.HasValue) 
+        {
+             employee.Status = request.Status.Value;
+        }
         employee.UpdatedAt = DateTime.UtcNow;
         employee.UpdatedBy = context.Current(Request).UserId;
         employee.Version++;
@@ -235,6 +261,96 @@ public sealed class HrController(
         return Ok(record);
     }
 
+    [HttpPost("attendance/set-status")]
+    public async Task<IActionResult> SetAttendanceStatus(SetAttendanceStatusRequest request)
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+        
+        var employee = await db.Employees.SingleOrDefaultAsync(x => x.EmployeeCode == request.EmployeeCode && !x.IsDeleted);
+        if (employee is null) return NotFound("Khong tim thay nhan vien.");
+        if (employee.Status == EmployeeStatus.TERMINATED) return BadRequest("Nhan vien da nghi viec.");
+
+        var record = await db.AttendanceRecords.SingleOrDefaultAsync(x => x.EmployeeId == employee.Id && x.WorkDate == request.WorkDate);
+        
+        bool isNew = record is null;
+        if (isNew)
+        {
+            record = new AttendanceRecord
+            {
+                EmployeeId = employee.Id,
+                WorkDate = request.WorkDate
+            };
+        }
+
+        var oldStatus = isNew ? "NONE" : record.Status.ToString();
+        var statusStr = request.Status.ToLowerInvariant();
+
+        if (statusStr == "present")
+        {
+            record.Status = AttendanceStatus.CHECKED_IN;
+            record.CheckInAt = request.WorkDate.ToDateTime(new TimeOnly(8, 0));
+            record.CheckOutAt = request.WorkDate.ToDateTime(new TimeOnly(17, 0));
+            record.WorkedHours = 8.00m;
+            record.LateMinutes = 0;
+            record.EarlyLeaveMinutes = 0;
+        }
+        else if (statusStr == "late")
+        {
+            record.Status = AttendanceStatus.LATE;
+            record.CheckInAt = request.WorkDate.ToDateTime(new TimeOnly(8, 15));
+            record.CheckOutAt = request.WorkDate.ToDateTime(new TimeOnly(17, 0));
+            record.WorkedHours = 8.00m;
+            record.LateMinutes = 15;
+            record.EarlyLeaveMinutes = 0;
+        }
+        else if (statusStr == "absent")
+        {
+            record.Status = AttendanceStatus.ABSENT;
+            record.CheckInAt = null;
+            record.CheckOutAt = null;
+            record.WorkedHours = 0;
+            record.LateMinutes = 0;
+            record.EarlyLeaveMinutes = 0;
+        }
+        else if (statusStr == "leave")
+        {
+            record.Status = AttendanceStatus.LEAVE;
+            record.CheckInAt = null;
+            record.CheckOutAt = null;
+            record.WorkedHours = 0;
+            record.LateMinutes = 0;
+            record.EarlyLeaveMinutes = 0;
+        }
+        else if (statusStr == "wfh")
+        {
+            record.Status = AttendanceStatus.WFH;
+            record.CheckInAt = request.WorkDate.ToDateTime(new TimeOnly(8, 0));
+            record.CheckOutAt = request.WorkDate.ToDateTime(new TimeOnly(17, 0));
+            record.WorkedHours = 8.00m;
+            record.LateMinutes = 0;
+            record.EarlyLeaveMinutes = 0;
+        }
+        else
+        {
+            return BadRequest($"Trang thai '{request.Status}' khong hop le.");
+        }
+
+        if (isNew)
+        {
+            db.AttendanceRecords.Add(record);
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.SaveChangesAsync();
+        await actionLog.AddLogAsync(Request, "UPDATE_STATUS", "AttendanceRecord", record.Id.ToString(),
+            $"Cap nhat trang thai cham cong ngay {record.WorkDate} cua NV {employee.EmployeeCode} sang {record.Status}",
+            new { Status = oldStatus }, new { Status = record.Status.ToString() });
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(record);
+    }
+
     // ─── Nghỉ phép ─────────────────────────────────────────────────────────────
 
     [HttpPost("leave-requests")]
@@ -282,6 +398,85 @@ public sealed class HrController(
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return Ok(leave);
+    }
+
+    [HttpPatch("leave-requests/{id:int}")]
+    public async Task<IActionResult> UpdateLeaveRequest(int id, UpdateLeaveRequest request)
+    {
+        context.Require(Request, Role.OWNER);
+        var leave = await db.LeaveRequests.SingleOrDefaultAsync(x => x.Id == id);
+        if (leave is null) return NotFound("Khong tim thay phieu nghi phep.");
+        
+        var employee = await db.Employees.SingleOrDefaultAsync(x => x.Id == leave.EmployeeId && !x.IsDeleted);
+        if (employee is null) return NotFound("Khong tim thay nhan vien.");
+
+        var oldStatus = leave.Status;
+        var oldDays = leave.Days;
+        var oldType = leave.LeaveType;
+
+        if (oldStatus == ApprovalStatus.APPROVED && oldType == "ANNUAL")
+        {
+            employee.AnnualLeaveBalance += oldDays;
+        }
+
+        leave.FromDate = request.FromDate ?? leave.FromDate;
+        leave.ToDate = request.ToDate ?? leave.ToDate;
+        leave.LeaveType = request.LeaveType ?? leave.LeaveType;
+        leave.Reason = request.Reason ?? leave.Reason;
+        
+        if (request.Status is { } statusStr && Enum.TryParse<ApprovalStatus>(statusStr, true, out var newStatus))
+        {
+            leave.Status = newStatus;
+            if (newStatus == ApprovalStatus.APPROVED)
+            {
+                leave.ApprovedBy = context.Current(Request).UserId;
+                leave.ApprovedAt = DateTime.UtcNow;
+            }
+        }
+
+        var newDays = (decimal)(leave.ToDate.DayNumber - leave.FromDate.DayNumber + 1);
+        leave.Days = newDays;
+
+        if (leave.Status == ApprovalStatus.APPROVED && leave.LeaveType == "ANNUAL")
+        {
+            if (employee.AnnualLeaveBalance < newDays)
+                return BadRequest($"So ngay phep khong du (con {employee.AnnualLeaveBalance}, yeu cau {newDays}).");
+            employee.AnnualLeaveBalance -= newDays;
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        await db.SaveChangesAsync();
+        await actionLog.AddLogAsync(Request, "UPDATE", "LeaveRequest", leave.Id.ToString(),
+            $"Cap nhat phieu nghi phep ID {leave.Id}", oldStatus, leave, employee.FullName);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(leave);
+    }
+
+    [HttpDelete("leave-requests/{id:int}")]
+    public async Task<IActionResult> DeleteLeaveRequest(int id)
+    {
+        context.Require(Request, Role.OWNER);
+        var leave = await db.LeaveRequests.SingleOrDefaultAsync(x => x.Id == id);
+        if (leave is null) return NotFound("Khong tim thay phieu nghi phep.");
+
+        if (leave.Status == ApprovalStatus.APPROVED && leave.LeaveType == "ANNUAL")
+        {
+            var employee = await db.Employees.SingleOrDefaultAsync(x => x.Id == leave.EmployeeId);
+            if (employee != null)
+            {
+                employee.AnnualLeaveBalance += leave.Days;
+            }
+        }
+
+        db.LeaveRequests.Remove(leave);
+        await db.SaveChangesAsync();
+
+        await actionLog.AddLogAsync(Request, "DELETE", "LeaveRequest", leave.Id.ToString(),
+            $"Xoa phieu nghi phep ID {leave.Id}", null, null);
+
+        return NoContent();
     }
 
     // ─── Lương ─────────────────────────────────────────────────────────────────
@@ -342,7 +537,21 @@ public sealed class HrController(
     [HttpGet("payroll/list")]
     public async Task<IActionResult> PayrollList()
     {
-        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER);
-        return Ok(await db.PayrollRecords.AsNoTracking().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).ToListAsync());
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF, Role.CASHIER);
+        return Ok(await db.PayrollRecords.AsNoTracking().Include(x => x.Employee).OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).ToListAsync());
+    }
+
+    [HttpGet("attendance")]
+    public async Task<IActionResult> GetAttendance()
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF, Role.CASHIER);
+        return Ok(await db.AttendanceRecords.AsNoTracking().Include(x => x.Employee).ToListAsync());
+    }
+
+    [HttpGet("leave-requests")]
+    public async Task<IActionResult> GetLeaveRequests()
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF, Role.CASHIER);
+        return Ok(await db.LeaveRequests.AsNoTracking().Include(x => x.Employee).ToListAsync());
     }
 }

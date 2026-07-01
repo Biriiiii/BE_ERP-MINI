@@ -38,6 +38,7 @@ public sealed class InventoryService(AppDbContext db)
                 ReceiptId  = receipt.Id,
                 Quantity   = line.Quantity,
                 UnitCost   = line.UnitCost,
+                ManufacturingDate = line.ManufacturingDate,
                 ExpiryDate = line.ExpiryDate
             });
         }

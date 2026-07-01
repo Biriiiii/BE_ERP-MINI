@@ -39,6 +39,27 @@ public sealed class PayrollService(AppDbContext db)
         var taxableIncome= gross - insurance - 11_000_000m;
         var tax          = taxableIncome <= 0 ? 0 : CalculatePIT(taxableIncome);
 
+        var existing = await db.PayrollRecords.SingleOrDefaultAsync(x => x.EmployeeId == employeeId && x.Year == year && x.Month == month);
+        if (existing != null)
+        {
+            if (existing.Status != ApprovalStatus.PENDING)
+                throw new InvalidOperationException("Bảng lương đã được duyệt hoặc chốt, không thể tính lại.");
+            
+            existing.BaseSalary = employee.BaseSalary;
+            existing.MealAllowance = employee.MealAllowance;
+            existing.AttendanceAllowance = attendanceAllowance;
+            existing.OtPay = decimal.Round(otPay, 0);
+            existing.UnpaidLeaveDeduction = decimal.Round(unpaidDeduction, 0);
+            existing.LateDeduction = decimal.Round(lateDeduction, 0);
+            existing.Gross = decimal.Round(gross, 0);
+            existing.Insurance = decimal.Round(insurance, 0);
+            existing.PersonalIncomeTax = decimal.Round(tax, 0);
+            existing.Net = decimal.Round(gross - insurance - tax, 0);
+            
+            await db.SaveChangesAsync();
+            return existing;
+        }
+
         var payroll = new PayrollRecord
         {
             EmployeeId          = employeeId,
@@ -55,7 +76,7 @@ public sealed class PayrollService(AppDbContext db)
             PersonalIncomeTax   = decimal.Round(tax, 0),
             Net                 = decimal.Round(gross - insurance - tax, 0),
             Status              = ApprovalStatus.PENDING,
-            CreatedBy           = employeeId   // placeholder — controller sẽ override
+            CreatedBy           = employeeId
         };
 
         db.PayrollRecords.Add(payroll);

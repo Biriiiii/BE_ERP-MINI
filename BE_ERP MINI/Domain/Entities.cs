@@ -147,6 +147,13 @@ public sealed class PayrollAdjustment
 //  INVENTORY — KHO HÀNG
 // ═══════════════════════════════════════════════════════
 
+public sealed class ProductCategory
+{
+    public int Id { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+}
+
 public sealed class Product
 {
     public int Id { get; set; }
@@ -158,6 +165,9 @@ public sealed class Product
     public decimal MinStockLevel { get; set; }
     public decimal AverageCost { get; set; }
     public decimal SalePrice { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? Brand { get; set; }
+    public string? Supplier { get; set; }
     public bool IsFresh { get; set; }
     // Audit columns
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -181,6 +191,7 @@ public sealed class Lot
     public string? LotNumber { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitCost { get; set; }
+    public DateOnly? ManufacturingDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }
     public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
     // Navigation
@@ -197,6 +208,8 @@ public sealed class WarehouseReceipt
     public int? ApprovedBy { get; set; }
     public DateTime? ApprovedAt { get; set; }
     public ApprovalStatus Status { get; set; } = ApprovalStatus.PENDING;
+    public ReceiptPaymentStatus PaymentStatus { get; set; } = ReceiptPaymentStatus.UNPAID;
+    public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Navigation
     public ICollection<WarehouseReceiptLine> Lines { get; set; } = [];
@@ -209,7 +222,9 @@ public sealed class WarehouseReceiptLine
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }
     public decimal UnitCost { get; set; }
+    public DateOnly? ManufacturingDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }
+    public string? Notes { get; set; }
     // Navigation
     public WarehouseReceipt Receipt { get; set; } = null!;
     public Product Product { get; set; } = null!;
@@ -228,6 +243,53 @@ public sealed class WarehouseIssue
     public ApprovalStatus Status { get; set; } = ApprovalStatus.APPROVED;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Navigation
+    public Product Product { get; set; } = null!;
+}
+
+public sealed class Customer
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Address { get; set; }
+    public string? Notes { get; set; }
+    public decimal TotalSpent { get; set; }
+    public int TotalOrders { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public bool IsDeleted { get; set; }
+}
+
+public sealed class SalesInvoice
+{
+    public int Id { get; set; }
+    public string CustomerName { get; set; } = "";
+    public string? CustomerPhone { get; set; }
+    public int? CustomerId { get; set; }
+    public int CreatedBy { get; set; }
+    public int? ApprovedBy { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public ApprovalStatus Status { get; set; } = ApprovalStatus.PENDING;
+    public ReceiptPaymentStatus PaymentStatus { get; set; } = ReceiptPaymentStatus.UNPAID;
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CASH;
+    public string? Notes { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    // Navigation
+    public Customer? Customer { get; set; }
+    public ICollection<SalesInvoiceLine> Lines { get; set; } = [];
+}
+
+public sealed class SalesInvoiceLine
+{
+    public int Id { get; set; }
+    public int InvoiceId { get; set; }
+    public int ProductId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal DiscountAmount { get; set; }
+    public string? Notes { get; set; }
+    // Navigation
+    public SalesInvoice Invoice { get; set; } = null!;
     public Product Product { get; set; } = null!;
 }
 

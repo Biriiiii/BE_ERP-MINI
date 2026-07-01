@@ -149,6 +149,60 @@ public sealed class AuditModuleController(AppDbContext db, ErpContext context) :
         [FromQuery] int page = 1, [FromQuery] int limit = 50)
         => QueryByTypes(["User"], action, from, to, page, limit, Role.OWNER);
 
+    /// <summary>Lịch sử toàn hệ thống</summary>
+    [HttpGet("all")]
+    [Tags("Audit - Toàn hệ thống")]
+    public async Task<IActionResult> AllAudit(
+        [FromQuery] string? entityTypes, [FromQuery] string? action, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1, [FromQuery] int limit = 50)
+    {
+        var types = string.IsNullOrWhiteSpace(entityTypes) 
+            ? Array.Empty<string>() 
+            : entityTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            
+        // Require OWNER for full audit access
+        context.Require(Request, Role.OWNER);
+        limit = Math.Min(limit, 100);
+
+        var query = db.UserActionLogs.AsNoTracking();
+        
+        if (types.Length > 0)
+            query = query.Where(x => types.Contains(x.EntityType));
+
+        if (!string.IsNullOrWhiteSpace(action))
+        {
+            var actions = action.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            query = query.Where(x => actions.Contains(x.Action));
+        }
+        if (from.HasValue)
+            query = query.Where(x => x.CreatedAt >= from.Value.ToDateTime(TimeOnly.MinValue));
+        if (to.HasValue)
+            query = query.Where(x => x.CreatedAt <= to.Value.ToDateTime(TimeOnly.MaxValue));
+
+        var total = await query.CountAsync();
+        var data = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Skip((page - 1) * limit)
+            .Take(limit)
+            .Select(x => new
+            {
+                x.Id,
+                x.Action,
+                x.EntityType,
+                x.EntityId,
+                x.EntityLabel,
+                x.Summary,
+                x.UserName,
+                x.UserId,
+                x.CreatedAt,
+                x.Reason,
+                x.IpAddress
+            })
+            .ToListAsync();
+
+        return Ok(new { data, total, page, limit });
+    }
+
     // ══════════════════════════════════════════════════════════════
     // HELPER CHUNG
     // ══════════════════════════════════════════════════════════════

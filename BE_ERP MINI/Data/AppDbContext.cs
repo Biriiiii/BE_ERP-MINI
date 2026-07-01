@@ -22,10 +22,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PayrollAdjustment>  PayrollAdjustments=> Set<PayrollAdjustment>();
 
     // ── INVENTORY ────────────────────────────────────────
+    public DbSet<ProductCategory>      ProductCategories  => Set<ProductCategory>();
     public DbSet<Product>              Products           => Set<Product>();
     public DbSet<Lot>                  Lots               => Set<Lot>();
     public DbSet<WarehouseReceipt>     WarehouseReceipts  => Set<WarehouseReceipt>();
     public DbSet<WarehouseReceiptLine> WarehouseReceiptLines => Set<WarehouseReceiptLine>();
+    public DbSet<SalesInvoice>         SalesInvoices      => Set<SalesInvoice>();
+    public DbSet<SalesInvoiceLine>     SalesInvoiceLines  => Set<SalesInvoiceLine>();
+    public DbSet<Customer>             Customers          => Set<Customer>();
     public DbSet<WarehouseIssue>       WarehouseIssues    => Set<WarehouseIssue>();
     public DbSet<ShrinkageRecord>      ShrinkageRecords   => Set<ShrinkageRecord>();
     public DbSet<StocktakeSession>     StocktakeSessions  => Set<StocktakeSession>();
@@ -214,6 +218,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Type).HasMaxLength(20);
             e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        // ── ProductCategory ───────────────────────────────
+        mb.Entity<ProductCategory>(e =>
+        {
+            e.ToTable("ProductCategories");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
         });
 
         // ── Product ───────────────────────────────────────

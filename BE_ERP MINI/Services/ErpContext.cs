@@ -24,6 +24,6 @@ public sealed class ErpContext
     {
         var current = Current(request);
         if (!roles.Contains(current.Role))
-            throw new UnauthorizedAccessException("Ban khong co quyen thuc hien thao tac nay.");
+            throw new UnauthorizedAccessException($"Ban khong co quyen thuc hien thao tac nay. (Role: {current.Role})");
     }
 }

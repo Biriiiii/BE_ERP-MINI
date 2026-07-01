@@ -15,10 +15,11 @@ public enum EmployeeStatus    { ACTIVE, TERMINATED }
 public enum ContractStatus    { ACTIVE, EXPIRED, TERMINATED }
 public enum ApprovalStatus    { DRAFT, PENDING, APPROVED, REJECTED, LOCKED }
 public enum PaymentMethod     { CASH, BANK, CARD, EWALLET, CREDIT }
-public enum AttendanceStatus  { CHECKED_IN, CHECKED_OUT, LATE, EARLY_LEAVE, MISSING_CHECKOUT }
+public enum AttendanceStatus  { CHECKED_IN, CHECKED_OUT, LATE, EARLY_LEAVE, MISSING_CHECKOUT, ABSENT, LEAVE, WFH }
 public enum InventoryIssueType{ SALE, RETURN_SUPPLIER, INTERNAL_USE, SHRINKAGE }
 public enum ShrinkageType     { EXPIRED, DAMAGED, LOST, OTHER }
 public enum PromotionType     { PERCENT, FIXED_AMOUNT }
+public enum ReceiptPaymentStatus { UNPAID = 1, PARTIAL = 2, PAID = 3 }
 
 public enum JournalSource
 {

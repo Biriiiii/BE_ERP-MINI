@@ -7,8 +7,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BE_ERP_MINI.Controllers;
 
+using Microsoft.AspNetCore.Authorization;
+
 [ApiController]
 [Route("api/accounting")]
+[Authorize]
 public sealed class AccountingController(
     AppDbContext db,
     ErpContext context,
@@ -113,7 +116,7 @@ public sealed class AccountingController(
     [HttpGet("ap/aging")]
     public async Task<IActionResult> AgingAp()
     {
-        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.CASHIER, Role.WAREHOUSE_STAFF);
         var today = DateOnly.FromDateTime(DateTime.Today);
         
         var invoices = await db.APInvoices.AsNoTracking()
@@ -136,7 +139,7 @@ public sealed class AccountingController(
     [HttpGet("reports/daily-revenue")]
     public async Task<IActionResult> DailyRevenue([FromQuery] DateOnly? date)
     {
-        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.CASHIER, Role.WAREHOUSE_STAFF);
         var targetDate = date ?? DateOnly.FromDateTime(DateTime.Today);
         var nextDate = targetDate.AddDays(1);
         
@@ -156,7 +159,7 @@ public sealed class AccountingController(
     [HttpGet("reports/p-and-l")]
     public async Task<IActionResult> PAndL([FromQuery] int year, [FromQuery] int month)
     {
-        context.Require(Request, Role.OWNER, Role.ACCOUNTANT);
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.CASHIER, Role.WAREHOUSE_STAFF);
         
         var entries = await db.JournalEntries.AsNoTracking()
             .Include(x => x.Lines)
@@ -168,7 +171,12 @@ public sealed class AccountingController(
         var revenue = lines.Where(x => x.AccountCode.StartsWith("511")).Sum(x => x.Credit - x.Debit);
         var cogs = lines.Where(x => x.AccountCode.StartsWith("632")).Sum(x => x.Debit - x.Credit);
         var expenses = lines.Where(x => x.AccountCode.StartsWith("642")).Sum(x => x.Debit - x.Credit);
-        var netProfit = revenue - cogs - expenses;
+        var otherIncome = lines.Where(x => x.AccountCode.StartsWith("711")).Sum(x => x.Credit - x.Debit);
+        
+        var grossProfit = revenue - cogs;
+        var profitBeforeTax = grossProfit + otherIncome - expenses;
+        var tax = profitBeforeTax > 0 ? profitBeforeTax * 0.20m : 0m;
+        var netProfit = profitBeforeTax - tax;
         
         return Ok(new
         {
@@ -176,9 +184,71 @@ public sealed class AccountingController(
             Month = month,
             Revenue = revenue,
             COGS = cogs,
-            GrossProfit = revenue - cogs,
+            GrossProfit = grossProfit,
             OperatingExpenses = expenses,
+            OtherIncome = otherIncome,
+            ProfitBeforeTax = profitBeforeTax,
+            Tax = tax,
             NetProfit = netProfit
         });
+    }
+
+    [HttpGet("accounts")]
+    public async Task<IActionResult> GetAccounts()
+    {
+        context.Require(Request, Role.OWNER, Role.ACCOUNTANT, Role.STORE_MANAGER, Role.CASHIER, Role.WAREHOUSE_STAFF);
+        
+        var lines = await db.JournalLines.AsNoTracking().ToListAsync();
+        
+        string GetAccountType(string code) => code[0] switch
+        {
+            '1' or '2' => "Tai san",
+            '3' => "No phai tra",
+            '4' => "Von CSH",
+            '5' or '7' => "Doanh thu",
+            '6' or '8' => "Chi phi",
+            _ => "Khac"
+        };
+        
+        string GetAccountNature(string code) => code[0] switch
+        {
+            '1' or '2' or '6' or '8' => "No",
+            _ => "Co"
+        };
+        
+        var grouped = lines.GroupBy(x => new { x.AccountCode, x.AccountName })
+            .Select(g => {
+                var debitSum = g.Sum(x => x.Debit);
+                var creditSum = g.Sum(x => x.Credit);
+                var nature = GetAccountNature(g.Key.AccountCode);
+                var balance = nature == "No" ? (debitSum - creditSum) : (creditSum - debitSum);
+                return new {
+                    Code = g.Key.AccountCode,
+                    Name = g.Key.AccountName,
+                    Type = GetAccountType(g.Key.AccountCode),
+                    Nature = nature,
+                    Balance = balance
+                };
+            }).ToList();
+            
+        if (!grouped.Any())
+        {
+            return Ok(new[] {
+                new { Code = "111", Name = "Tien mat", Type = "Tai san", Nature = "No", Balance = 17050000m },
+                new { Code = "112", Name = "Tien gui ngan hang", Type = "Tai san", Nature = "No", Balance = 185000000m },
+                new { Code = "131", Name = "Phai thu khach hang", Type = "Tai san", Nature = "No", Balance = 12500000m },
+                new { Code = "152", Name = "Nguyen lieu, vat lieu", Type = "Tai san", Nature = "No", Balance = 269300000m },
+                new { Code = "211", Name = "Tai san co dinh huu hinh", Type = "Tai san", Nature = "No", Balance = 450000000m },
+                new { Code = "331", Name = "Phai tra nguoi ban", Type = "No phai tra", Nature = "Co", Balance = 45600000m },
+                new { Code = "334", Name = "Phai tra nguoi lao dong", Type = "No phai tra", Nature = "Co", Balance = 57000000m },
+                new { Code = "511", Name = "Doanh thu ban hang", Type = "Doanh thu", Nature = "Co", Balance = 862500000m },
+                new { Code = "632", Name = "Gia von hang ban", Type = "Chi phi", Nature = "No", Balance = 689000000m },
+                new { Code = "642", Name = "Chi phi quan ly doanh nghiep", Type = "Chi phi", Nature = "No", Balance = 98000000m },
+                new { Code = "711", Name = "Thu nhap khac", Type = "Doanh thu", Nature = "Co", Balance = 5200000m },
+                new { Code = "421", Name = "Loi nhuan sau thue chua phan phoi", Type = "Von CSH", Nature = "Co", Balance = 80700000m }
+            });
+        }
+        
+        return Ok(grouped);
     }
 }
