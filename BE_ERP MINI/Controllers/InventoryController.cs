@@ -16,7 +16,8 @@ public sealed class InventoryController(
     AppDbContext db,
     ErpContext context,
     InventoryService inventory,
-    UserActionLogService actionLog) : ControllerBase
+    UserActionLogService actionLog,
+    IImageService imageService) : ControllerBase
 {
     [HttpGet("products")]
     public async Task<IActionResult> Products([FromQuery] string? keyword, [FromQuery] string? category)
@@ -119,6 +120,84 @@ public sealed class InventoryController(
         await db.SaveChangesAsync();
         await tx.CommitAsync();
         return NoContent();
+    }
+
+    [HttpPost("products/{id:int}/image")]
+    public async Task<IActionResult> UploadProductImage(int id, [FromForm] IFormFile file)
+    {
+        try {
+            context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+            var product = await db.Products.SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+            if (product is null) return NotFound("Khong tim thay san pham.");
+
+            if (file == null || file.Length == 0) return BadRequest(new { error = "File không hợp lệ hoặc rỗng." });
+
+            var uploadResult = await imageService.AddImageAsync(file);
+            if (uploadResult.Error != null) return BadRequest(new { error = uploadResult.Error.Message });
+
+            // Delete old image if exists
+            if (!string.IsNullOrEmpty(product.ImageUrl))
+            {
+                try {
+                    // Try to extract publicId from URL
+                    var uri = new Uri(product.ImageUrl);
+                    var segments = uri.Segments;
+                    var lastSegment = segments.Last();
+                    var publicId = lastSegment.Split('.')[0];
+                    var folderSegment = segments.Length > 2 ? segments[segments.Length - 2] : "";
+                    var fullPublicId = folderSegment + publicId;
+                    if (!string.IsNullOrEmpty(fullPublicId)) {
+                        await imageService.DeleteImageAsync(fullPublicId);
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (uploadResult.SecureUrl == null) {
+                return StatusCode(500, new { error = "Tải ảnh lên thành công nhưng không lấy được link ảnh (SecureUrl is null)." });
+            }
+
+            product.ImageUrl = uploadResult.SecureUrl.ToString();
+            product.UpdatedAt = DateTime.UtcNow;
+            product.UpdatedBy = context.Current(Request).UserId;
+            product.Version++;
+            
+            await db.SaveChangesAsync();
+
+            return Ok(new { imageUrl = product.ImageUrl, version = product.Version });
+        } catch (Exception ex) {
+            return StatusCode(500, new { error = "Lỗi Server (500): " + ex.Message + "\n" + ex.StackTrace });
+        }
+    }
+
+    [HttpDelete("products/{id:int}/image")]
+    public async Task<IActionResult> DeleteProductImage(int id)
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER);
+        var product = await db.Products.SingleOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
+        if (product is null) return NotFound("Khong tim thay san pham.");
+
+        if (string.IsNullOrEmpty(product.ImageUrl)) return NoContent();
+
+        try {
+            var uri = new Uri(product.ImageUrl);
+            var segments = uri.Segments;
+            var lastSegment = segments.Last();
+            var publicId = lastSegment.Split('.')[0];
+            var folderSegment = segments.Length > 2 ? segments[segments.Length - 2] : "";
+            var fullPublicId = folderSegment + publicId;
+            if (!string.IsNullOrEmpty(fullPublicId)) {
+                await imageService.DeleteImageAsync(fullPublicId);
+            }
+        } catch { /* ignore */ }
+
+        product.ImageUrl = null;
+        product.UpdatedAt = DateTime.UtcNow;
+        product.UpdatedBy = context.Current(Request).UserId;
+        product.Version++;
+        
+        await db.SaveChangesAsync();
+
+        return Ok(new { version = product.Version });
     }
 
     [HttpGet("stock-balance")]
@@ -409,6 +488,99 @@ public sealed class InventoryController(
 
         await actionLog.AddLogAsync(Request, "DELETE", "ProductCategory", category.Id.ToString(),
             $"Xoa nhom hang {category.Code}", null, null, category.Code);
+
+        return NoContent();
+    }
+
+    // ─── Thương hiệu (Brands) ──────────────────────────────────────────────────
+
+    [HttpGet("brands")]
+    public async Task<IActionResult> GetBrands()
+    {
+        return Ok(await db.ProductBrands.AsNoTracking().OrderBy(x => x.Code).ToListAsync());
+    }
+
+    [HttpPost("brands")]
+    public async Task<IActionResult> CreateBrand(CreateBrandRequest request)
+    {
+        context.Require(Request, Role.OWNER);
+        
+        var code = request.Code.ToUpperInvariant().Trim();
+        if (await db.ProductBrands.AnyAsync(x => x.Code == code))
+            return BadRequest("Ma thuong hieu da ton tai.");
+
+        var brand = new ProductBrand
+        {
+            Code = code,
+            Name = request.Name.Trim()
+        };
+
+        db.ProductBrands.Add(brand);
+        await db.SaveChangesAsync();
+
+        await actionLog.AddLogAsync(Request, "CREATE", "ProductBrand", brand.Id.ToString(),
+            $"Tao thuong hieu {brand.Code} - {brand.Name}", null, brand, brand.Code);
+
+        return Ok(brand);
+    }
+
+    [HttpPatch("brands/{id:int}")]
+    public async Task<IActionResult> UpdateBrand(int id, UpdateBrandRequest request)
+    {
+        context.Require(Request, Role.OWNER);
+        
+        var brand = await db.ProductBrands.SingleOrDefaultAsync(x => x.Id == id);
+        if (brand is null) return NotFound("Khong tim thay thuong hieu.");
+
+        var oldCode = brand.Code;
+        var old = new { brand.Code, brand.Name };
+
+        if (request.Code is { } c)
+        {
+            var newCode = c.ToUpperInvariant().Trim();
+            if (newCode != oldCode && await db.ProductBrands.AnyAsync(x => x.Code == newCode))
+                return BadRequest("Ma thuong hieu moi da ton tai.");
+            brand.Code = newCode;
+        }
+
+        brand.Name = request.Name?.Trim() ?? brand.Name;
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        
+        if (oldCode != brand.Code)
+        {
+            var products = await db.Products.Where(x => x.Brand == oldCode).ToListAsync();
+            foreach (var p in products)
+            {
+                p.Brand = brand.Code;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        await actionLog.AddLogAsync(Request, "UPDATE", "ProductBrand", brand.Id.ToString(),
+            $"Cap nhat thuong hieu {brand.Code}", old, brand, brand.Code);
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        return Ok(brand);
+    }
+
+    [HttpDelete("brands/{id:int}")]
+    public async Task<IActionResult> DeleteBrand(int id)
+    {
+        context.Require(Request, Role.OWNER);
+        
+        var brand = await db.ProductBrands.SingleOrDefaultAsync(x => x.Id == id);
+        if (brand is null) return NotFound("Khong tim thay thuong hieu.");
+
+        if (await db.Products.AnyAsync(x => x.Brand == brand.Code && !x.IsDeleted))
+            return BadRequest("Thuong hieu dang co san pham, khong the xoa.");
+
+        db.ProductBrands.Remove(brand);
+        await db.SaveChangesAsync();
+
+        await actionLog.AddLogAsync(Request, "DELETE", "ProductBrand", brand.Id.ToString(),
+            $"Xoa thuong hieu {brand.Code}", null, null, brand.Code);
 
         return NoContent();
     }

@@ -32,6 +32,7 @@ builder.Services.AddScoped<AccountingService>();
 builder.Services.AddScoped<UserActionLogService>();
 builder.Services.AddScoped<AuditExportService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IImageService, CloudinaryService>();
 
 // Authentication & JWT
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");

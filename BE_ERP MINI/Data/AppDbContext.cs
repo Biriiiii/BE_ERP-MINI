@@ -23,6 +23,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     // ── INVENTORY ────────────────────────────────────────
     public DbSet<ProductCategory>      ProductCategories  => Set<ProductCategory>();
+    public DbSet<ProductBrand>         ProductBrands      => Set<ProductBrand>();
     public DbSet<Product>              Products           => Set<Product>();
     public DbSet<Lot>                  Lots               => Set<Lot>();
     public DbSet<WarehouseReceipt>     WarehouseReceipts  => Set<WarehouseReceipt>();
@@ -49,6 +50,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<AccountingPeriod>AccountingPeriods => Set<AccountingPeriod>();
     public DbSet<APInvoice>       APInvoices        => Set<APInvoice>();
     public DbSet<APPayment>       APPayments        => Set<APPayment>();
+
+    // ── SEPAY ───────────────────────────────────────────
+    public DbSet<SepayTransaction> SepayTransactions => Set<SepayTransaction>();
 
     protected override void OnModelCreating(ModelBuilder mb)
     {
@@ -490,6 +494,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Method).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             e.Property(x => x.Reference).HasMaxLength(100);
+        });
+
+        // ── SepayTransaction ──────────────────────────────
+        mb.Entity<SepayTransaction>(e =>
+        {
+            e.ToTable("SepayTransactions");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.HasIndex(x => x.SepayTransactionId).IsUnique(); // Chống trùng webhook
+            e.HasIndex(x => x.MatchedInvoiceId);
+            e.HasIndex(x => x.Code);
+            e.HasIndex(x => x.ReceivedAt);
+            e.Property(x => x.Gateway).HasMaxLength(50);
+            e.Property(x => x.TransactionDate).HasMaxLength(30);
+            e.Property(x => x.AccountNumber).HasMaxLength(30);
+            e.Property(x => x.Code).HasMaxLength(50);
+            e.Property(x => x.Content).HasMaxLength(500);
+            e.Property(x => x.TransferType).HasMaxLength(10);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.TransferAmount).HasColumnType("decimal(18,2)");
+            e.Property(x => x.Accumulated).HasColumnType("decimal(18,2)");
+            e.Property(x => x.ReferenceCode).HasMaxLength(100);
         });
     }
 }

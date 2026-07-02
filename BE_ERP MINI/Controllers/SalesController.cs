@@ -258,6 +258,22 @@ public sealed class SalesController(
         }
     }
 
+    // ── Chuyển đổi phương thức thanh toán (VD: Chuyển khoản → Tiền mặt) ─────
+    [HttpPatch("invoices/{id:int}/switch-payment")]
+    public async Task<IActionResult> SwitchPaymentMethod(int id, [FromBody] SwitchPaymentRequest request)
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER, Role.CASHIER, Role.SALES_STAFF);
+
+        var invoice = await db.SalesInvoices.SingleOrDefaultAsync(x => x.Id == id);
+        if (invoice is null) return NotFound("Khong tim thay hoa don.");
+
+        invoice.PaymentMethod = (PaymentMethod)request.PaymentMethod;
+        invoice.PaymentStatus = (ReceiptPaymentStatus)request.PaymentStatus;
+        await db.SaveChangesAsync();
+
+        return Ok(invoice);
+    }
+
     // ── Customers ────────────────────────────────────────────────────────────
     [HttpGet("customers")]
     public async Task<IActionResult> GetCustomers([FromQuery] string? search)

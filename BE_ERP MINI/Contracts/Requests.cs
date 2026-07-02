@@ -17,12 +17,15 @@ public sealed record SetAttendanceStatusRequest(string EmployeeCode, DateOnly Wo
 // ── INVENTORY ────────────────────────────────────────────────────────────────
 public sealed record CreateCategoryRequest(string Code, string Name);
 public sealed record UpdateCategoryRequest(string? Code, string? Name);
+public sealed record CreateBrandRequest(string Code, string Name);
+public sealed record UpdateBrandRequest(string? Code, string? Name);
 public sealed record CreateProductRequest(string Name, string CategoryCode, string Unit, string? Barcode, decimal MinStockLevel, decimal AverageCost, decimal SalePrice, string? ImageUrl, string? Brand, string? Supplier, string? Sku, bool IsFresh = false);
 public sealed record UpdateProductRequest(string? Name, string? CategoryCode, string? Unit, string? Barcode, decimal? MinStockLevel, decimal? AverageCost, decimal? SalePrice, string? ImageUrl, string? Brand, string? Supplier, string? Sku, bool? IsFresh, int? Version, string? Reason);
 public sealed record CreateReceiptRequest(string SupplierName, int CreatedBy, string? Notes, int PaymentStatus, List<CreateReceiptLineRequest> Lines);
 public sealed record CreateReceiptLineRequest(int ProductId, decimal Quantity, decimal UnitCost, DateOnly? ManufacturingDate, DateOnly? ExpiryDate, string? Notes);
 public sealed record CreateSalesInvoiceRequest(string CustomerName, string? CustomerPhone, int? CustomerId, int CreatedBy, string? Notes, int PaymentStatus, int PaymentMethod, List<CreateSalesInvoiceLineRequest> Lines);
 public sealed record CreateSalesInvoiceLineRequest(int ProductId, decimal Quantity, decimal UnitPrice, decimal DiscountAmount, string? Notes);
+public sealed record SwitchPaymentRequest(int PaymentMethod, int PaymentStatus);
 public sealed record CreateCustomerRequest(string Name, string? Phone, string? Email, string? Address, string? Notes);
 public sealed record UpdateCustomerRequest(string? Name, string? Phone, string? Email, string? Address, string? Notes);
 public sealed record IssueStockRequest(int ProductId, decimal Quantity, bool Sale, int? CreatedBy, string? Reason);
