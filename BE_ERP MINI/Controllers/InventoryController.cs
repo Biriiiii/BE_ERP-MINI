@@ -303,6 +303,16 @@ public sealed class InventoryController(
         catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
     }
 
+    [HttpGet("stocktake")]
+    public async Task<IActionResult> GetStocktakeSessions()
+    {
+        context.Require(Request, Role.OWNER, Role.STORE_MANAGER, Role.WAREHOUSE_STAFF);
+        var sessions = await db.StocktakeSessions.AsNoTracking()
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+        return Ok(sessions);
+    }
+
     [HttpPost("stocktake")]
     public async Task<IActionResult> Stocktake(CreateStocktakeRequest request)
     {
@@ -491,7 +501,6 @@ public sealed class InventoryController(
 
         return NoContent();
     }
-
     // ─── Thương hiệu (Brands) ──────────────────────────────────────────────────
 
     [HttpGet("brands")]
@@ -584,4 +593,9 @@ public sealed class InventoryController(
 
         return NoContent();
     }
+
+    // ─── END INVENTORY ───────────────────────────────────
 }
+
+public sealed record CreateBrandRequest(string Code, string Name);
+public sealed record UpdateBrandRequest(string? Code, string? Name);

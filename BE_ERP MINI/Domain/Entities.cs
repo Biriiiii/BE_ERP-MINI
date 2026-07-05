@@ -147,14 +147,14 @@ public sealed class PayrollAdjustment
 //  INVENTORY — KHO HÀNG
 // ═══════════════════════════════════════════════════════
 
-public sealed class ProductCategory
+public sealed class ProductBrand
 {
     public int Id { get; set; }
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
 }
 
-public sealed class ProductBrand
+public sealed class ProductCategory
 {
     public int Id { get; set; }
     public string Code { get; set; } = "";
@@ -279,6 +279,7 @@ public sealed class SalesInvoice
     public ApprovalStatus Status { get; set; } = ApprovalStatus.PENDING;
     public ReceiptPaymentStatus PaymentStatus { get; set; } = ReceiptPaymentStatus.UNPAID;
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.CASH;
+    public decimal PaidAmount { get; set; }
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     // Navigation

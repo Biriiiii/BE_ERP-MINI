@@ -73,4 +73,18 @@ public sealed class PurchaseController(
         await db.SaveChangesAsync();
         return Ok(order);
     }
+
+    [HttpPatch("requests/{id:int}/approve")]
+    public async Task<IActionResult> ApproveRequest(int id)
+    {
+        context.Require(Request, Role.OWNER);
+        var pr = await db.PurchaseRequests.Include(x => x.Product).SingleOrDefaultAsync(x => x.Id == id);
+        if (pr is null) return NotFound("Khong tim thay PR.");
+        if (pr.Status == ApprovalStatus.APPROVED) return BadRequest("PR da duoc duyet.");
+        var old = pr.Status;
+        pr.Status = ApprovalStatus.APPROVED;
+        await actionLog.AddLogAsync(Request, "APPROVE", "PurchaseRequest", pr.Id.ToString(), $"Duyet PR {pr.Product?.Name} SL {pr.Quantity}", new { Status = old.ToString() }, new { Status = pr.Status.ToString() });
+        await db.SaveChangesAsync();
+        return Ok(pr);
+    }
 }

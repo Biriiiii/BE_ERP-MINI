@@ -58,6 +58,7 @@ public sealed class SalesController(
                 x.Status,
                 PaymentStatus = (int)x.PaymentStatus,
                 PaymentMethod = (int)x.PaymentMethod,
+                x.PaidAmount,
                 x.Notes,
                 x.CreatedAt,
                 TotalAmount = x.Lines.Sum(l => l.Quantity * l.UnitPrice - l.DiscountAmount),
@@ -162,6 +163,7 @@ public sealed class SalesController(
             Notes         = request.Notes,
             PaymentStatus = (ReceiptPaymentStatus)request.PaymentStatus,
             PaymentMethod = (PaymentMethod)request.PaymentMethod,
+            PaidAmount    = request.PaidAmount ?? (request.PaymentStatus == 3 ? request.Lines.Sum(l => l.Quantity * l.UnitPrice - l.DiscountAmount) : 0),
             Lines         = request.Lines.Select(x => new SalesInvoiceLine {
                 ProductId = x.ProductId,
                 Quantity = x.Quantity,
@@ -194,6 +196,18 @@ public sealed class SalesController(
                 var (cost, _) = await inventory.IssueFEFOAsync(line.ProductId, line.Quantity, true);
                 totalCost += cost;
                 totalRevenue += line.Quantity * line.UnitPrice - line.DiscountAmount;
+
+                // Create a WarehouseIssue record so it appears in the inventory transactions list
+                var issue = new WarehouseIssue
+                {
+                    ProductId = line.ProductId,
+                    Quantity = line.Quantity,
+                    Type = InventoryIssueType.SALE,
+                    Cost = cost,
+                    CreatedBy = request.ApproverId > 0 ? request.ApproverId : invoice.CreatedBy,
+                    Reason = $"Ban hang: HD {invoice.Id}"
+                };
+                db.WarehouseIssues.Add(issue);
             }
 
             invoice.Status = ApprovalStatus.APPROVED;
@@ -264,11 +278,21 @@ public sealed class SalesController(
     {
         context.Require(Request, Role.OWNER, Role.STORE_MANAGER, Role.CASHIER, Role.SALES_STAFF);
 
-        var invoice = await db.SalesInvoices.SingleOrDefaultAsync(x => x.Id == id);
+        var invoice = await db.SalesInvoices.Include(x => x.Lines).SingleOrDefaultAsync(x => x.Id == id);
         if (invoice is null) return NotFound("Khong tim thay hoa don.");
 
         invoice.PaymentMethod = (PaymentMethod)request.PaymentMethod;
         invoice.PaymentStatus = (ReceiptPaymentStatus)request.PaymentStatus;
+        
+        if (request.PaidAmount.HasValue)
+        {
+            invoice.PaidAmount = request.PaidAmount.Value;
+        }
+        else if (request.PaymentStatus == 3) // 3 = PAID
+        {
+            invoice.PaidAmount = invoice.Lines.Sum(l => l.Quantity * l.UnitPrice - l.DiscountAmount);
+        }
+
         await db.SaveChangesAsync();
 
         return Ok(invoice);

@@ -163,4 +163,82 @@ public sealed class PosController(
 
         return Ok(refund);
     }
+
+    [HttpGet("eod-report")]
+    public async Task<IActionResult> GetEodReport()
+    {
+        var today = DateTime.UtcNow.Date;
+        var tomorrow = today.AddDays(1);
+        
+        var transactions = await db.PosTransactions
+            .Include(x => x.Lines)
+            .Where(x => x.CreatedAt >= today && x.CreatedAt < tomorrow)
+            .ToListAsync();
+            
+        var invoices = await db.SalesInvoices
+            .Include(x => x.Lines)
+            .Where(x => x.CreatedAt >= today && x.CreatedAt < tomorrow)
+            .ToListAsync();
+            
+        var refunds = await db.PosRefunds
+            .Where(x => x.CreatedAt >= today && x.CreatedAt < tomorrow)
+            .ToListAsync();
+            
+        var sessions = await db.PosSessions
+            .Where(x => x.OpenedAt >= today && x.OpenedAt < tomorrow)
+            .OrderByDescending(x => x.OpenedAt)
+            .ToListAsync();
+            
+        var totalSales = transactions.Sum(x => x.TotalAmount) 
+                       + invoices.Sum(x => x.Lines.Sum(l => l.Quantity * l.UnitPrice - l.DiscountAmount));
+        var totalRefund = refunds.Sum(x => x.RefundAmount);
+        
+        var cashPayments = transactions.Where(x => x.PaymentMethod == PaymentMethod.CASH).Sum(x => x.TotalAmount)
+                         + invoices.Where(x => x.PaymentMethod == PaymentMethod.CASH).Sum(x => x.PaidAmount);
+        var cardPayments = transactions.Where(x => x.PaymentMethod != PaymentMethod.CASH).Sum(x => x.TotalAmount)
+                         + invoices.Where(x => x.PaymentMethod != PaymentMethod.CASH).Sum(x => x.PaidAmount);
+        
+        var openingCash = sessions.FirstOrDefault()?.OpeningFloat ?? 0;
+        var closingCash = sessions.FirstOrDefault()?.ClosingCash ?? (openingCash + cashPayments - totalRefund);
+        
+        var itemsCount = transactions.SelectMany(x => x.Lines).Sum(x => x.Quantity)
+                       + invoices.SelectMany(x => x.Lines).Sum(x => x.Quantity);
+        var totalTxCount = transactions.Count + invoices.Count;
+        
+        var todayDate = DateOnly.FromDateTime(today);
+        var nextWeek = todayDate.AddDays(7);
+        var expiringLots = await db.Lots
+            .Include(x => x.Product)
+            .Where(x => x.Quantity > 0 && x.ExpiryDate <= nextWeek)
+            .Select(x => new {
+                productId = x.ProductId,
+                quantity = x.Quantity,
+                name = x.Product.Name,
+                expiryDate = x.ExpiryDate,
+                isExpired = x.ExpiryDate < todayDate
+            })
+            .OrderBy(x => x.expiryDate)
+            .Take(5)
+            .ToListAsync();
+            
+        var lowStock = await db.Products
+            .Where(x => !x.IsDeleted && x.Lots.Sum(l => l.Quantity) <= x.MinStockLevel)
+            .Select(x => x.Name)
+            .Take(5)
+            .ToListAsync();
+
+        return Ok(new {
+            date = DateTime.Now.ToString("dd/MM/yyyy"),
+            openingCash,
+            totalSales,
+            totalRefund,
+            cashPayments,
+            cardPayments,
+            closingCash,
+            transactions = totalTxCount,
+            items = itemsCount,
+            expiring = expiringLots,
+            lowStock = lowStock
+        });
+    }
 }

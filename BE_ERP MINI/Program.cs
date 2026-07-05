@@ -12,7 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddJsonOptions(opts =>
     {
-        // Enum as string: "OWNER" thay vì 0
+        // Enum as string: "OWNER" thay vì 0s
         opts.JsonSerializerOptions.Converters.Add(
             new System.Text.Json.Serialization.JsonStringEnumConverter());
         // Cắt vòng lặp: Employee→AttendanceRecords→Employee→...

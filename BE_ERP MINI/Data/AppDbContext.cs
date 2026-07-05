@@ -22,8 +22,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PayrollAdjustment>  PayrollAdjustments=> Set<PayrollAdjustment>();
 
     // ── INVENTORY ────────────────────────────────────────
-    public DbSet<ProductCategory>      ProductCategories  => Set<ProductCategory>();
     public DbSet<ProductBrand>         ProductBrands      => Set<ProductBrand>();
+    public DbSet<ProductCategory>      ProductCategories  => Set<ProductCategory>();
     public DbSet<Product>              Products           => Set<Product>();
     public DbSet<Lot>                  Lots               => Set<Lot>();
     public DbSet<WarehouseReceipt>     WarehouseReceipts  => Set<WarehouseReceipt>();
@@ -222,6 +222,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Type).HasMaxLength(20);
             e.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             e.Property(x => x.Description).HasMaxLength(500);
+        });
+
+        // ── ProductBrand ─────────────────────────────────
+        mb.Entity<ProductBrand>(e =>
+        {
+            e.ToTable("ProductBrands");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.HasIndex(x => x.Code).IsUnique();
+            e.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(100).IsRequired();
         });
 
         // ── ProductCategory ───────────────────────────────
